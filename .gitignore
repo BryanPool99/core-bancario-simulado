@@ -1,0 +1,11 @@
+# .gitignore
+.env
+.env.*
+!.env.example
+
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
