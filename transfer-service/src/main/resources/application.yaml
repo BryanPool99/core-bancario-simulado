@@ -18,6 +18,16 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         #format_sql: true
 
+  kafka:
+    boostrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  # Tópicos personalizados de la aplicación
+  app:
+    kafka:
+      topic:
+        transfer-completed: transfer-completed-topic
 services:
   account-service:
     url: http://localhost:8081

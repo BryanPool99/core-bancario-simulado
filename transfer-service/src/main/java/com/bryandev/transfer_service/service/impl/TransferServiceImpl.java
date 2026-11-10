@@ -4,6 +4,8 @@ import com.bryandev.transfer_service.client.AccountClientWrapper;
 import com.bryandev.transfer_service.mapper.TransferMapper;
 import com.bryandev.transfer_service.model.dto.request.TransferRequestDto;
 import com.bryandev.transfer_service.model.dto.response.TransferResponseDto;
+import com.bryandev.transfer_service.model.events.TransferCompletedEvent;
+import com.bryandev.transfer_service.producer.TransferEventProducer;
 import com.bryandev.transfer_service.repository.TransferRepository;
 import com.bryandev.transfer_service.service.TransferService;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -12,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
+
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +27,8 @@ public class TransferServiceImpl implements TransferService {
 
     //private final RestClient accountServiceRestClient;
     private final AccountClientWrapper accountClientWrapper;
+
+    private final TransferEventProducer eventProducer;
 
     @Override
     @Transactional
@@ -70,6 +76,16 @@ public class TransferServiceImpl implements TransferService {
             savedTransfer.setStatus("SUCCESS");
             repository.save(savedTransfer);
             log.info("Transferencia completada exitosamente con ID: {}", savedTransfer.getId());
+            //PUBLICAR EVENTO A KAFKA DE FORMA ASINCRONA
+            var event = TransferCompletedEvent.builder()
+                    .transferId(savedTransfer.getId())
+                    .sourceAccountNumber(savedTransfer.getSourceAccountNumber())
+                    .targetAccountNumber(savedTransfer.getTargetAccountNumber())
+                    .amount(savedTransfer.getAmount())
+                    .timestamp(LocalDateTime.now())
+                    .status("SUCCESS")
+                    .build();
+            eventProducer.sendTransferCompletedEvent(event);
         } catch (HttpClientErrorException e) {
             // Si el account-service respondió con un 400 (ej. Fondos insuficientes o Cuenta no encontrada)
             log.warn("Error de cliente desde account-service: {}", e.getResponseBodyAsString());
