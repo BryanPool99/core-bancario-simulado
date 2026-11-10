@@ -1,16 +1,17 @@
 package com.bryandev.transfer_service.service.impl;
 
+import com.bryandev.transfer_service.client.AccountClientWrapper;
 import com.bryandev.transfer_service.mapper.TransferMapper;
 import com.bryandev.transfer_service.model.dto.request.TransferRequestDto;
 import com.bryandev.transfer_service.model.dto.response.TransferResponseDto;
 import com.bryandev.transfer_service.repository.TransferRepository;
 import com.bryandev.transfer_service.service.TransferService;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestClient;
 
 @Service
 @RequiredArgsConstructor
@@ -20,10 +21,12 @@ public class TransferServiceImpl implements TransferService {
     private final TransferRepository repository;
     private final TransferMapper mapper;
 
-    private final RestClient accountServiceRestClient;
+    //private final RestClient accountServiceRestClient;
+    private final AccountClientWrapper accountClientWrapper;
 
     @Override
     @Transactional
+    @CircuitBreaker(name = "accountService", fallbackMethod = "transferFallback")
     public TransferResponseDto executeTransfer(TransferRequestDto requestDto) {
         log.info("Iniciando transferencia de {} desde {} hacia {}",
                 requestDto.getAmount(), requestDto.getSourceAccountNumber(), requestDto.getTargetAccountNumber());
@@ -37,28 +40,28 @@ public class TransferServiceImpl implements TransferService {
         try {
             //PASO A: Debitar cuenta origen (isDeposit = false)
             log.info("Ejecutando débito en cuenta origen: {}", requestDto.getSourceAccountNumber());
-            accountServiceRestClient.post()
-                    .uri("/api/v1/accounts/{accountNumber}/transaction?amount={amount}&isDeposit=false",
-                            requestDto.getSourceAccountNumber(), requestDto.getAmount())
-                    .retrieve()
-                    .toBodilessEntity();
+            accountClientWrapper.executeAccountTransaction(
+                    requestDto.getSourceAccountNumber(),
+                    requestDto.getAmount(),
+                    false
+            );
             //PASO B: Abonar cuenta destino (isDeposit = true)
             log.info("Ejecutando abono en cuenta destino: {}", requestDto.getTargetAccountNumber());
             try {
-                accountServiceRestClient.post()
-                        .uri("/api/v1/accounts/{accountNumber}/transaction?amount={amount}&isDeposit=true",
-                                requestDto.getTargetAccountNumber(), requestDto.getAmount())
-                        .retrieve()
-                        .toBodilessEntity();
+                accountClientWrapper.executeAccountTransaction(
+                        requestDto.getTargetAccountNumber(),
+                        requestDto.getAmount(),
+                        true
+                );
             } catch (Exception e) {
                 log.error("Fallo al abonar en cuenta destino. Iniciando compensación (reversión de débito)...", e);
 
                 // COMPENSACIÓN: Devolver el dinero debitado a la cuenta origen
-                accountServiceRestClient.post()
-                        .uri("/api/v1/accounts/{accountNumber}/transaction?amount={amount}&isDeposit=true",
-                                requestDto.getSourceAccountNumber(), requestDto.getAmount())
-                        .retrieve()
-                        .toBodilessEntity();
+                accountClientWrapper.executeAccountTransaction(
+                        requestDto.getSourceAccountNumber(),
+                        requestDto.getAmount(),
+                        true
+                );
                 savedTransfer.setStatus("FAILED_COMPENSATED");
                 repository.save(savedTransfer);
                 throw new RuntimeException("Transferencia fallida y revertida por error en destino: " + e.getMessage());

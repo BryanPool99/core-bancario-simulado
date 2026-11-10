@@ -21,3 +21,42 @@ spring:
 services:
   account-service:
     url: http://localhost:8081
+
+#resilience4j:
+#  circuitbreaker:
+#    instances:
+#      accountService:
+#        registerHealthIndicator: true
+#        slidingWindowType: COUNT_BASED
+#        slidingWindowSize: 5            # Últimas 5 peticiones para evaluar
+#        failureRateThreshold: 50.0      # Si el 50% falla, el circuito se abre
+#        slowCallRateThreshold: 50.0     # Si el 50% es lento, cuenta como fallo
+#        slowCallDurationThreshold: 2s   # Considerado lento si tarda más de 2 segundos
+#        waitDurationInOpenState: 10s    # Tiempo que el circuito permanece abierto antes de reintentar
+#        permittedNumberOfCallsInHalfOpenState: 3
+#        automaticTransitionFromOpenToHalfOpenEnabled: true
+#  timelimiter:
+#    instances:
+#      accountService:
+#        timeoutDuration: 3s             # Tiempo máximo de espera para una llamada
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      accountServiceCB:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 2000ms
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+  retry:
+    instances:
+      accountServiceRetry:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
