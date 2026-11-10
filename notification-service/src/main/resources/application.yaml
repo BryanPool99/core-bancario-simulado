@@ -1,0 +1,19 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: notification-service
+  kafka:
+    boostrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.bryandev.notification_service.model.events"
+
+app:
+  kafka:
+    topic:
+      transfer-completed: transfer-completed-topic
